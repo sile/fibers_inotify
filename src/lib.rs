@@ -13,5 +13,6 @@ mod error;
 pub mod inotify; // TODO: private
 mod mask;
 mod mio_ext;
+pub mod service; // TODO: private
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -76,7 +76,6 @@ impl Inotify {
         match self.file.read(&mut buf) {
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.read_monitor.monitor();
                     Ok(None)
                 } else {
                     Err(track!(Error::from(e)))
@@ -93,10 +92,13 @@ impl Inotify {
                     let name = if raw_event.len == 0 {
                         None
                     } else {
+                        let start = offset - raw_event.len as usize;
+                        let mut end = offset;
+                        while end > 1 && buf[end - 1] == b'\0' && buf[end - 2] == b'\0' {
+                            end -= 1;
+                        }
                         let name = track!(
-                            CStr::from_bytes_with_nul(
-                                &buf[(offset - raw_event.len as usize)..offset]
-                            ).map_err(Error::from)
+                            CStr::from_bytes_with_nul(&buf[start..end]).map_err(Error::from)
                         )?;
                         let name = PathBuf::from(OsString::from_vec(name.to_bytes().to_owned()));
                         Some(name)
@@ -128,7 +130,7 @@ impl Stream for Inotify {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct WatchDecriptor(libc::c_int);
+pub struct WatchDecriptor(pub(crate) libc::c_int);
 
 #[derive(Debug, Clone)]
 pub struct Event {
@@ -140,9 +142,8 @@ pub struct Event {
 
 #[derive(Debug)]
 struct ReadMonitor {
-    register: Option<Register<OwnedEventedFd>>,
+    register: Register<OwnedEventedFd>,
     handle: Option<EventedHandle<OwnedEventedFd>>,
-    monitor_if_registered: bool,
     monitor: Option<Monitor<(), io::Error>>,
 }
 impl ReadMonitor {
@@ -152,39 +153,29 @@ impl ReadMonitor {
         });
 
         Ok(ReadMonitor {
-            register: Some(track_assert_some!(
-                register,
-                ErrorKind::Other,
-                "Not in a fiber context"
-            )),
+            register: track_assert_some!(register, ErrorKind::Other, "Not in a fiber context"),
             handle: None,
-            monitor_if_registered: false,
             monitor: None,
         })
-    }
-
-    fn monitor(&mut self) {
-        if let Some(ref handle) = self.handle {
-            self.monitor = Some(handle.monitor(Interest::Read));
-        } else {
-            self.monitor_if_registered = true;
-        }
     }
 }
 impl Future for ReadMonitor {
     type Item = ();
     type Error = Error;
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Async::Ready(Some(handle)) = track!(self.register.poll().map_err(Error::from))? {
-            self.handle = Some(handle);
-            self.register = None;
-            if self.monitor_if_registered {
-                self.monitor();
+        loop {
+            if let Some(handle) = self.handle.as_ref() {
+                if track!(self.monitor.poll().map_err(Error::from))?.is_ready() {
+                    self.monitor = Some(handle.monitor(Interest::Read));
+                    continue;
+                }
+                return Ok(Async::NotReady);
             }
+            if let Async::Ready(handle) = track!(self.register.poll().map_err(Error::from))? {
+                self.handle = Some(handle);
+                continue;
+            }
+            return Ok(Async::NotReady);
         }
-        if let Async::Ready(Some(())) = track!(self.monitor.poll().map_err(Error::from))? {
-            self.monitor = None;
-        }
-        Ok(Async::NotReady)
     }
 }
