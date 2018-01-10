@@ -107,6 +107,8 @@ impl InotifyService {
                 track_assert_some!(self.watchers.remove(&overwritten_id), ErrorKind::Other);
             overwritten_watcher.inotify_index = i + 1;
             track!(self.add_watch(&mut overwritten_watcher))?;
+            self.watchers
+                .insert(overwritten_watcher.id, overwritten_watcher);
         }
 
         watcher.wd = wd;
