@@ -5,10 +5,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use fibers::sync::mpsc;
 use futures::{Async, Future, Poll, Stream};
 
-use {Error, ErrorKind, Result, WatchMask};
-use internal_inotify::{Inotify, InotifyEvent, WatchDecriptor};
-
-type WatcherId = usize;
+use {Error, ErrorKind, Result, WatchMask, Watcher, WatcherEvent};
+use internal_inotify::{Inotify as InnerInotify, WatchDecriptor};
+use watcher::WatcherId;
 
 #[derive(Debug)]
 struct WatcherState {
@@ -21,14 +20,14 @@ struct WatcherState {
 }
 
 #[derive(Debug)]
-struct InotifyState {
-    inotify: Inotify,
+struct Inotify {
+    inner: InnerInotify,
     wds: HashMap<WatchDecriptor, WatcherId>,
 }
-impl InotifyState {
+impl Inotify {
     fn new() -> Result<Self> {
-        Ok(InotifyState {
-            inotify: track!(Inotify::new())?,
+        Ok(Inotify {
+            inner: track!(InnerInotify::new())?,
             wds: HashMap::new(),
         })
     }
@@ -36,7 +35,7 @@ impl InotifyState {
 
 #[derive(Debug)]
 pub struct InotifyService {
-    inotifies: Vec<InotifyState>,
+    inotifies: Vec<Inotify>,
     command_tx: mpsc::Sender<Command>,
     command_rx: mpsc::Receiver<Command>,
     watcher_id: Arc<AtomicUsize>,
@@ -88,12 +87,12 @@ impl InotifyService {
     fn add_watch(&mut self, watcher: &mut WatcherState) -> Result<bool> {
         let i = watcher.inotify_index;
         if i == self.inotifies.len() {
-            self.inotifies.push(track!(InotifyState::new())?);
+            self.inotifies.push(track!(Inotify::new())?);
         }
 
         let mut mask = watcher.mask;
         mask.remove(WatchMask::MASK_ADD);
-        let result = track!(self.inotifies[i].inotify.add_watch(&watcher.path, mask));
+        let result = track!(self.inotifies[i].inner.add_watch(&watcher.path, mask));
         let wd = match result {
             Err(e) => {
                 let _ = watcher.event_tx.send(Err(e));
@@ -129,7 +128,7 @@ impl InotifyService {
     fn deregister_watcher(&mut self, watcher_id: WatcherId) -> Result<()> {
         let watcher = track_assert_some!(self.watchers.remove(&watcher_id), ErrorKind::Other);
         let i = watcher.inotify_index;
-        track!(self.inotifies[i].inotify.remove_watch(watcher.wd))?;
+        track!(self.inotifies[i].inner.remove_watch(watcher.wd))?;
         track_assert_some!(self.inotifies[i].wds.remove(&watcher.wd), ErrorKind::Other);
         Ok(())
     }
@@ -142,7 +141,7 @@ impl Future for InotifyService {
             track!(self.handle_command(command))?;
         }
         for inotify in self.inotifies.iter_mut() {
-            while let Async::Ready(Some(event)) = track!(inotify.inotify.poll())? {
+            while let Async::Ready(Some(event)) = track!(inotify.inner.poll())? {
                 let watcher_id = inotify.wds[&event.wd];
                 let _ = self.watchers[&watcher_id]
                     .event_tx
@@ -169,47 +168,11 @@ impl InotifyServiceHandle {
             event_tx,
         };
         let _ = self.command_tx.send(command);
-        Watcher {
-            id: watcher_id,
-            service: self.clone(),
-            event_rx,
-        }
+        Watcher::new(watcher_id, self.clone(), event_rx)
     }
-    fn deregister_watcher(&self, watcher: &Watcher) {
-        let command = Command::DeregisterWatcher {
-            watcher_id: watcher.id,
-        };
+    pub(crate) fn deregister_watcher(&self, watcher_id: WatcherId) {
+        let command = Command::DeregisterWatcher { watcher_id };
         let _ = self.command_tx.send(command);
-    }
-}
-
-#[derive(Debug)]
-pub enum WatcherEvent {
-    Started,
-    Restarted, // TODO: rename
-    Notified(InotifyEvent),
-}
-
-#[derive(Debug)]
-pub struct Watcher {
-    id: WatcherId,
-    service: InotifyServiceHandle,
-    event_rx: mpsc::Receiver<Result<WatcherEvent>>,
-}
-impl Stream for Watcher {
-    type Item = WatcherEvent;
-    type Error = Error;
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.event_rx.poll().expect("Never fails") {
-            Async::NotReady => Ok(Async::NotReady),
-            Async::Ready(None) => Ok(Async::Ready(None)),
-            Async::Ready(Some(result)) => Ok(Async::Ready(Some(track!(result)?))),
-        }
-    }
-}
-impl Drop for Watcher {
-    fn drop(&mut self) {
-        self.service.deregister_watcher(self);
     }
 }
 
