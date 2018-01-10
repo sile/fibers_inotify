@@ -20,7 +20,7 @@ use mio_ext::OwnedEventedFd;
 #[derive(Debug)]
 pub struct Inotify {
     file: File,
-    events: VecDeque<Event>,
+    events: VecDeque<InotifyEvent>,
     read_monitor: ReadMonitor,
     _cannot_sync: PhantomData<*const ()>,
 }
@@ -67,7 +67,7 @@ impl Inotify {
         }
     }
 
-    fn read_event(&mut self) -> Result<Option<Event>> {
+    fn read_event(&mut self) -> Result<Option<InotifyEvent>> {
         if let Some(event) = self.events.pop_front() {
             return Ok(Some(event));
         }
@@ -103,7 +103,7 @@ impl Inotify {
                         let name = PathBuf::from(OsString::from_vec(name.to_bytes().to_owned()));
                         Some(name)
                     };
-                    let event = Event {
+                    let event = InotifyEvent {
                         wd: WatchDecriptor(raw_event.wd),
                         mask: EventMask::from_bits_truncate(raw_event.mask),
                         cookie: raw_event.cookie,
@@ -117,7 +117,7 @@ impl Inotify {
     }
 }
 impl Stream for Inotify {
-    type Item = Event;
+    type Item = InotifyEvent;
     type Error = Error;
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         track!(self.read_monitor.poll())?;
@@ -133,8 +133,8 @@ impl Stream for Inotify {
 pub struct WatchDecriptor(pub(crate) libc::c_int);
 
 #[derive(Debug, Clone)]
-pub struct Event {
-    pub wd: WatchDecriptor,
+pub struct InotifyEvent {
+    pub(crate) wd: WatchDecriptor,
     pub mask: EventMask,
     pub cookie: u32,
     pub name: Option<PathBuf>,

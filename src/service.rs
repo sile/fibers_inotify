@@ -6,7 +6,7 @@ use fibers::sync::mpsc;
 use futures::{Async, Future, Poll, Stream};
 
 use {Error, ErrorKind, Result, WatchMask};
-use inotify::{Event, Inotify, WatchDecriptor};
+use internal_inotify::{Inotify, InotifyEvent, WatchDecriptor};
 
 type WatcherId = usize;
 
@@ -184,8 +184,8 @@ impl InotifyServiceHandle {
 #[derive(Debug)]
 pub enum WatcherEvent {
     Started,
-    Restarted, // TODO
-    Notified(Event),
+    Restarted, // TODO: rename
+    Notified(InotifyEvent),
 }
 
 #[derive(Debug)]

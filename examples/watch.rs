@@ -3,8 +3,7 @@ extern crate fibers_inotify;
 extern crate futures;
 
 use fibers::{Executor, InPlaceExecutor, Spawn};
-use fibers_inotify::WatchMask;
-use fibers_inotify::service::InotifyService;
+use fibers_inotify::{InotifyService, WatchMask};
 use futures::{Future, Stream};
 
 fn main() {
