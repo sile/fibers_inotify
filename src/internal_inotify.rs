@@ -17,6 +17,26 @@ use libc;
 use {Error, ErrorKind, EventMask, Result, WatchMask};
 use mio_ext::OwnedEventedFd;
 
+/// Event notified by [inotify].
+///
+/// [inotify]: http://man7.org/linux/man-pages/man7/inotify.7.html
+#[derive(Debug, Clone)]
+pub struct InotifyEvent {
+    pub(crate) wd: WatchDecriptor,
+
+    /// Mask describing event.
+    pub mask: EventMask,
+
+    /// Unique cookie associating related events.
+    pub cookie: u32,
+
+    /// The file/directory name within to the watched directory.
+    ///
+    /// This is present only when an event is returned for a file or directory
+    /// inside a watched directory.
+    pub name: Option<PathBuf>,
+}
+
 #[derive(Debug)]
 pub struct Inotify {
     file: File,
@@ -132,14 +152,6 @@ impl Stream for Inotify {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct WatchDecriptor(pub(crate) libc::c_int);
 
-#[derive(Debug, Clone)]
-pub struct InotifyEvent {
-    pub(crate) wd: WatchDecriptor,
-    pub mask: EventMask,
-    pub cookie: u32,
-    pub name: Option<PathBuf>,
-}
-
 #[derive(Debug)]
 struct ReadMonitor {
     register: Register<OwnedEventedFd>,
@@ -151,7 +163,6 @@ impl ReadMonitor {
         let register = fibers::fiber::with_current_context(|mut context| {
             context.poller().register(OwnedEventedFd(fd))
         });
-
         Ok(ReadMonitor {
             register: track_assert_some!(register, ErrorKind::Other, "Not in a fiber context"),
             handle: None,

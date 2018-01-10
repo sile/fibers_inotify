@@ -6,11 +6,12 @@ use libc;
 use trackable::error::TrackableError;
 use trackable::error::{ErrorKind as TrackableErrorKind, ErrorKindExt};
 
+/// This crate specific `Error` type.
 #[derive(Debug, Clone)]
 pub struct Error(TrackableError<ErrorKind>);
 derive_traits_for_trackable_error_newtype!(Error, ErrorKind);
 impl Error {
-    pub fn last_os_error() -> Self {
+    pub(crate) fn last_os_error() -> Self {
         Error::from(io::Error::last_os_error())
     }
 }
@@ -55,10 +56,20 @@ impl<E: Into<Error>> From<MonitorError<E>> for Error {
     }
 }
 
+/// Possible error kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
+    /// Input is invalid.
+    ///
+    /// E.g., EINVAL, EACCES, EBADF, EFAULT, ENAMETOOLONG, ENOENT
     InvalidInput,
+
+    /// System resource shortage.
+    ///
+    /// E.g., EMFILE, ENOMEM, ENOSPC
     ResourceShortage,
+
+    /// Other error.
     Other,
 }
 impl TrackableErrorKind for ErrorKind {}
