@@ -2,6 +2,16 @@
 name = "fibers_inotify"
 version = "0.1.0"
 authors = ["Takeru Ohta <phjgt308@gmail.com>"]
+description = "A futures friendly inotify wrapper for fibers crate"
+homepage = "https://github.com/sile/fibers_inotify"
+repository = "https://github.com/sile/fibers_inotify"
+readme = "README.md"
+keywords = ["inotify"]
+license = "MIT"
+
+[badges]
+travis-ci = {repository = "sile/fibers_inotify"}
+codecov = {repository = "sile/fibers_inotify"}
 
 [dependencies]
 fibers = "0.1"
