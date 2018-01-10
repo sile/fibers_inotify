@@ -7,4 +7,7 @@ authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 fibers = "0.1"
 futures = "0.1"
 inotify = "0.5"
+inotify-sys = "0.1"
+libc = "0.2"
+mio = "0.6"
 trackable = "0.2"
