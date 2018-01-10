@@ -104,8 +104,9 @@ impl Inotify {
             Ok(read_size) => {
                 let mut offset = 0;
                 while offset < read_size {
-                    let raw_event: &inotify_sys::inotify_event =
-                        unsafe { mem::transmute((&buf[offset..]).as_ptr()) };
+                    let raw_event = unsafe {
+                        &*((&buf[offset..]).as_ptr() as *const inotify_sys::inotify_event)
+                    };
                     offset += mem::size_of::<inotify_sys::inotify_event>() + raw_event.len as usize;
                     track_assert!(offset <= read_size, ErrorKind::Other);
 
@@ -176,7 +177,8 @@ impl Future for ReadMonitor {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             if let Some(handle) = self.handle.as_ref() {
-                if track!(self.monitor.poll().map_err(Error::from))?.is_ready() {
+                let is_ready = track!(self.monitor.poll().map_err(Error::from))?.is_ready();
+                if is_ready {
                     self.monitor = Some(handle.monitor(Interest::Read));
                     continue;
                 }

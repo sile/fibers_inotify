@@ -71,7 +71,8 @@ impl InotifyService {
     }
     fn register_watcher(&mut self, mut watcher: WatcherState) -> Result<()> {
         track_assert!(!self.watchers.contains_key(&watcher.id), ErrorKind::Other);
-        if track!(self.add_watch(&mut watcher))? {
+        let is_succeeded = track!(self.add_watch(&mut watcher))?;
+        if is_succeeded {
             self.watchers.insert(watcher.id, watcher);
         }
         Ok(())
@@ -131,7 +132,7 @@ impl Future for InotifyService {
         while let Async::Ready(Some(command)) = self.command_rx.poll().expect("Never fails") {
             track!(self.handle_command(command))?;
         }
-        for inotify in self.inotifies.iter_mut() {
+        for inotify in &mut self.inotifies {
             while let Async::Ready(Some(event)) = track!(inotify.inotify.poll())? {
                 let watcher_id = inotify.wds[&event.wd];
                 let _ = self.watchers[&watcher_id]
@@ -140,6 +141,11 @@ impl Future for InotifyService {
             }
         }
         Ok(Async::NotReady)
+    }
+}
+impl Default for InotifyService {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
