@@ -134,10 +134,11 @@ impl Future for InotifyService {
         }
         for inotify in &mut self.inotifies {
             while let Async::Ready(Some(event)) = track!(inotify.inotify.poll())? {
-                let watcher_id = inotify.wds[&event.wd];
-                let _ = self.watchers[&watcher_id]
-                    .event_tx
-                    .send(Ok(WatcherEvent::Notified(event)));
+                if let Some(watcher_id) = inotify.wds.get(&event.wd) {
+                    let _ = self.watchers[watcher_id]
+                        .event_tx
+                        .send(Ok(WatcherEvent::Notified(event)));
+                }
             }
         }
         Ok(Async::NotReady)
