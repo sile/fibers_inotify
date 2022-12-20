@@ -1,3 +1,9 @@
+use fibers;
+use fibers::io::poll::{EventedHandle, Interest, Register};
+use fibers::sync::oneshot::Monitor;
+use futures::{Async, Future, Poll, Stream};
+use inotify_sys;
+use libc;
 use std::collections::VecDeque;
 use std::ffi::{CStr, CString, OsString};
 use std::fs::File;
@@ -7,15 +13,10 @@ use std::mem;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::path::{Path, PathBuf};
-use fibers;
-use fibers::io::poll::{EventedHandle, Interest, Register};
-use fibers::sync::oneshot::Monitor;
-use futures::{Async, Future, Poll, Stream};
-use inotify_sys;
-use libc;
+use std::sync::Arc;
 
-use {Error, ErrorKind, EventMask, Result, WatchMask};
 use mio_ext::OwnedEventedFd;
+use {Error, ErrorKind, EventMask, Result, WatchMask};
 
 /// Event notified by [inotify].
 ///
@@ -66,10 +67,10 @@ impl Inotify {
         mask: WatchMask,
     ) -> Result<WatchDecriptor> {
         let wd = unsafe {
-            let path = track!(
-                CString::new(path.as_ref().to_path_buf().into_os_string().into_vec())
-                    .map_err(Error::from)
-            )?;
+            let path = track!(CString::new(
+                path.as_ref().to_path_buf().into_os_string().into_vec()
+            )
+            .map_err(Error::from))?;
             inotify_sys::inotify_add_watch(self.file.as_raw_fd(), path.as_ptr(), mask.bits())
         };
         if wd == -1 {
@@ -105,7 +106,7 @@ impl Inotify {
                 let mut offset = 0;
                 while offset < read_size {
                     let raw_event = unsafe {
-                        &*((&buf[offset..]).as_ptr() as *const inotify_sys::inotify_event)
+                        &*((buf[offset..]).as_ptr() as *const inotify_sys::inotify_event)
                     };
                     offset += mem::size_of::<inotify_sys::inotify_event>() + raw_event.len as usize;
                     track_assert!(offset <= read_size, ErrorKind::Other);
@@ -156,7 +157,7 @@ pub struct WatchDecriptor(pub(crate) libc::c_int);
 #[derive(Debug)]
 struct ReadMonitor {
     register: Register<OwnedEventedFd>,
-    handle: Option<EventedHandle<OwnedEventedFd>>,
+    handle: Option<Arc<EventedHandle<OwnedEventedFd>>>,
     monitor: Option<Monitor<(), io::Error>>,
 }
 impl ReadMonitor {

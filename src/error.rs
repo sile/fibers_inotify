@@ -1,15 +1,14 @@
+use fibers::sync::oneshot::MonitorError;
+use libc;
 use std::ffi;
 use std::io;
 use std::sync::mpsc::RecvError;
-use fibers::sync::oneshot::MonitorError;
-use libc;
 use trackable::error::TrackableError;
 use trackable::error::{ErrorKind as TrackableErrorKind, ErrorKindExt};
 
 /// This crate specific `Error` type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, trackable::TrackableError)]
 pub struct Error(TrackableError<ErrorKind>);
-derive_traits_for_trackable_error_newtype!(Error, ErrorKind);
 impl Error {
     pub(crate) fn last_os_error() -> Self {
         Error::from(io::Error::last_os_error())
@@ -32,7 +31,8 @@ impl From<RecvError> for Error {
 }
 impl From<io::Error> for Error {
     fn from(f: io::Error) -> Self {
-        let kind = f.raw_os_error()
+        let kind = f
+            .raw_os_error()
             .map_or(ErrorKind::Other, |errno| match errno {
                 libc::EINVAL
                 | libc::EACCES
