@@ -1,7 +1,7 @@
 fibers_inotify
 ==============
 
-[![fibers_inotify](http://meritbadge.herokuapp.com/fibers_inotify)](https://crates.io/crates/fibers_inotify)
+[![fibers_inotify](https://img.shields.io/crates/v/fibers_inotify.svg)](https://crates.io/crates/fibers_inotify)
 [![Documentation](https://docs.rs/fibers_inotify/badge.svg)](https://docs.rs/fibers_inotify)
 [![Build Status](https://travis-ci.org/sile/fibers_inotify.svg?branch=master)](https://travis-ci.org/sile/fibers_inotify)
 [![Code Coverage](https://codecov.io/gh/sile/fibers_inotify/branch/master/graph/badge.svg)](https://codecov.io/gh/sile/fibers_inotify/branch/master)
